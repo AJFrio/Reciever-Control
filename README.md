@@ -16,6 +16,23 @@ This application detects a raised, open hand with MediaPipe and drives an L9110S
 
 > **Tip:** Use an external supply for motors that draw more than the Pi’s 5 V rail can safely provide. Always share ground between the Pi and the driver supply.
 
+```
+Raspberry Pi (BCM)             L9110S Driver                DC Motor
+┌────────────────────┐         ┌────────────────────┐       ┌──────────┐
+│ GPIO17 ────────────┼────────▶│ IA1                │──────▶│ Motor +  │
+│ GPIO18 ────────────┼────────▶│ IB2                │──────▶│ Motor -  │
+│ GND   ─────────────┼────────▶│ GND                │       └──────────┘
+│ 5V*  ──────────────┼────────▶│ VCC (2.5–12 V)     │
+└────────────────────┘         └────────────────────┘
+            ▲                             ▲
+            │                             │
+            └─────────────── Shared Ground ────────────────┘
+
+*Use an external supply within the driver’s range when your motor needs more
+ current than the Pi’s 5 V pin can deliver. Connect its positive lead to `VCC`
+ and its ground to the common ground line.
+```
+
 ## Configuration
 
 Open `main.py` and adjust the constants near the top as needed:
