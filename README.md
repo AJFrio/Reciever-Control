@@ -1,0 +1,34 @@
+## Receiver Control
+
+This application detects a raised, open hand with MediaPipe and drives an L9110S H-bridge from a Raspberry Pi to spin a single DC motor. The motor direction follows the detected hand tilt:
+
+- Left tilt → forward (by default)
+- Right tilt → reverse
+- Vertical (within `45°`) → motor stops
+
+## Hardware Wiring
+
+- `MOTOR_FORWARD_PIN` (`GPIO17` by default) → L9110S `IA1`
+- `MOTOR_BACKWARD_PIN` (`GPIO18` by default) → L9110S `IB2`
+- Raspberry Pi `5 V` (or external motor supply within 2.5–12 V) → L9110S `VCC`
+- Raspberry Pi `GND` → L9110S `GND`
+- Motor leads connect to `OA1`/`OB1` (or `OA2`/`OB2`)
+
+> **Tip:** Use an external supply for motors that draw more than the Pi’s 5 V rail can safely provide. Always share ground between the Pi and the driver supply.
+
+## Configuration
+
+Open `main.py` and adjust the constants near the top as needed:
+
+- `MOTOR_FORWARD_PIN` / `MOTOR_BACKWARD_PIN`: change to the BCM pins you wired
+- `LEFT_DIRECTION_IS_FORWARD`: set `False` if you wire the driver differently or prefer the right tilt to be forward
+- `MOTOR_NEUTRAL_ANGLE`: widen or narrow the neutral zone that keeps the motor stopped
+
+## Running
+
+```bash
+python main.py
+```
+
+On non-Raspberry Pi systems the motor calls fall back to console logging so you can test the hand-tracking logic without GPIO access.
+

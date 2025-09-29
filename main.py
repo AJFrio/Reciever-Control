@@ -2,6 +2,95 @@ import cv2
 import mediapipe as mp
 import math
 
+try:
+    import RPi.GPIO as GPIO
+except (ImportError, RuntimeError):
+    GPIO = None
+
+
+# === Motor configuration ===================================================
+# Update these BCM pin numbers to match the Raspberry Pi pins wired to
+# IA1 (forward) and IB2 (reverse) on the L9110S driver.
+MOTOR_FORWARD_PIN = 17
+MOTOR_BACKWARD_PIN = 18
+
+# When True, pointing LEFT triggers MOTOR_FORWARD_PIN; when False, pointing RIGHT does.
+LEFT_DIRECTION_IS_FORWARD = True
+
+# Angle in degrees that counts as "neutral" (motor stops) around vertical.
+MOTOR_NEUTRAL_ANGLE = 45.0
+
+
+class MotorController:
+    """Controls a single DC motor through an L9110S driver."""
+
+    def __init__(self, forward_pin: int, backward_pin: int, *, gpio_mode: str = "BCM") -> None:
+        self.forward_pin = forward_pin
+        self.backward_pin = backward_pin
+        self.current_state = "stopped"
+        self.gpio_mode = gpio_mode
+        self.available = GPIO is not None
+        self._gpio_initialized = False
+
+        if self.available:
+            self._initialize_gpio()
+        else:
+            print(
+                "Warning: RPi.GPIO is not available. Motor control is disabled; "
+                "update dependencies or run on a Raspberry Pi."
+            )
+
+    def _initialize_gpio(self) -> None:
+        GPIO.setwarnings(False)
+
+        if self.gpio_mode.upper() == "BCM":
+            GPIO.setmode(GPIO.BCM)
+        elif self.gpio_mode.upper() == "BOARD":
+            GPIO.setmode(GPIO.BOARD)
+        else:
+            raise ValueError(f"Unsupported GPIO mode '{self.gpio_mode}'. Use 'BCM' or 'BOARD'.")
+
+        GPIO.setup(self.forward_pin, GPIO.OUT, initial=GPIO.LOW)
+        GPIO.setup(self.backward_pin, GPIO.OUT, initial=GPIO.LOW)
+        self._gpio_initialized = True
+
+    def forward(self) -> None:
+        self._set_state("forward")
+
+    def reverse(self) -> None:
+        self._set_state("reverse")
+
+    def stop(self) -> None:
+        self._set_state("stopped")
+
+    def _set_state(self, target_state: str) -> None:
+        if target_state == self.current_state:
+            return
+
+        if not self.available:
+            print(f"Motor state -> {target_state} (simulated)")
+            self.current_state = target_state
+            return
+
+        if target_state == "forward":
+            GPIO.output(self.forward_pin, GPIO.HIGH)
+            GPIO.output(self.backward_pin, GPIO.LOW)
+        elif target_state == "reverse":
+            GPIO.output(self.forward_pin, GPIO.LOW)
+            GPIO.output(self.backward_pin, GPIO.HIGH)
+        elif target_state == "stopped":
+            GPIO.output(self.forward_pin, GPIO.LOW)
+            GPIO.output(self.backward_pin, GPIO.LOW)
+        else:
+            raise ValueError(f"Unknown motor state '{target_state}'.")
+
+        self.current_state = target_state
+
+    def cleanup(self) -> None:
+        if self.available and self._gpio_initialized:
+            GPIO.cleanup()
+        self.current_state = "stopped"
+
 
 def is_hand_open(hand_landmarks, handedness) -> bool:
     """
@@ -143,6 +232,7 @@ def run_hand_joint_overlay(camera_index: int = 0, draw_labels: bool = False) -> 
 
     hands_solution = mp.solutions.hands
     face_mesh_solution = mp.solutions.face_mesh
+    motor_controller = MotorController(MOTOR_FORWARD_PIN, MOTOR_BACKWARD_PIN)
 
     with hands_solution.Hands(
         static_image_mode=False,
@@ -241,12 +331,26 @@ def run_hand_joint_overlay(camera_index: int = 0, draw_labels: bool = False) -> 
                     # - Right deviation (positive) >= 45° -> green
                     # - Left deviation (negative) <= -45° -> blue
                     # - Otherwise -> orange
-                    if signed_angle_deg >= 45.0:
+                    if signed_angle_deg >= MOTOR_NEUTRAL_ANGLE:
                         box_color = (0, 255, 0)  # Green
-                    elif signed_angle_deg <= -45.0:
+                    elif signed_angle_deg <= -MOTOR_NEUTRAL_ANGLE:
                         box_color = (255, 0, 0)  # Blue
                     else:
                         box_color = (0, 140, 255)  # Orange
+
+                    if abs_angle_deg < MOTOR_NEUTRAL_ANGLE:
+                        motor_controller.stop()
+                    else:
+                        if signed_angle_deg < 0:
+                            if LEFT_DIRECTION_IS_FORWARD:
+                                motor_controller.forward()
+                            else:
+                                motor_controller.reverse()
+                        else:
+                            if LEFT_DIRECTION_IS_FORWARD:
+                                motor_controller.reverse()
+                            else:
+                                motor_controller.forward()
 
                     # Draw bounding box around middle finger
                     xs = [p[0] for p in middle_points]
@@ -289,6 +393,7 @@ def run_hand_joint_overlay(camera_index: int = 0, draw_labels: bool = False) -> 
         finally:
             video_capture.release()
             cv2.destroyAllWindows()
+            motor_controller.cleanup()
 
 
 def main() -> None:
