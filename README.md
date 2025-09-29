@@ -6,6 +6,10 @@ This application detects a raised, open hand with MediaPipe and drives an L9110S
 - Right tilt → reverse
 - Vertical (within `45°`) → motor stops
 
+## Housing CAD
+
+- [Onshape enclosure model](https://cad.onshape.com/documents/6807801388cd1d3c9d6b9f2a/w/23686d7df571e290bd4fe000/e/c297ecbb82ea916d8e0fea8e?renderMode=0&uiState=68dac285ec910c36b04511ce)
+
 ## Hardware Wiring
 
 - `MOTOR_FORWARD_PIN` (`GPIO17` by default) → L9110S `IA1`
