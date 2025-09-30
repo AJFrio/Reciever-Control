@@ -83,7 +83,7 @@ To automatically start the Receiver Control system when your Raspberry Pi boots:
 
 3. **Copy the service file to systemd:**
    ```bash
-   sudo cp /home/frioa1/Downloads/Reciever-Control-main/receiver-control.service /etc/systemd/system/
+   sudo cp /home/frioaj1/Downloads/Reciever-Control-main/receiver-control.service /etc/systemd/system/
    ```
 
 4. **Reload systemd to recognize the new service:**
@@ -100,7 +100,7 @@ To automatically start the Receiver Control system when your Raspberry Pi boots:
    ```bash
    sudo systemctl start receiver-control.service
    # Or start from the project directory:
-   # cd /home/frioa1/Downloads/Reciever-Control-main && ./start_receiver_control.sh
+   # cd /home/frioaj1/Downloads/Reciever-Control-main && ./start_receiver_control.sh
    ```
 
 7. **Check service status:**
@@ -118,10 +118,11 @@ To automatically start the Receiver Control system when your Raspberry Pi boots:
 
 ### Important Notes:
 
-- The service runs as the `pi` user and assumes your project is in `/home/frioa1/Downloads/Reciever-Control-main`
+- The service runs as the `frioaj1` user and assumes your project is in `/home/frioaj1/Downloads/Reciever-Control-main`
 - If using a different username or path, edit the service file accordingly
 - The service includes display environment variables for GUI applications
 - If you modify the script, restart the service: `sudo systemctl restart receiver-control.service`
+- **Note:** The `frioaj1` user needs sudo privileges to manage (start/stop/enable) the service
 
 ### Runtime Speed Control:
 

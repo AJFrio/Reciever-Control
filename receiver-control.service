@@ -5,15 +5,15 @@ Wants=network.target
 
 [Service]
 Type=simple
-User=pi
-WorkingDirectory=/home/frioa1/Downloads/Reciever-Control-main
-ExecStart=/home/frioa1/Downloads/Reciever-Control-main/start_receiver_control.sh
+User=frioaj1
+WorkingDirectory=/home/frioaj1/Downloads/Reciever-Control-main
+ExecStart=/home/frioaj1/Downloads/Reciever-Control-main/start_receiver_control.sh
 Restart=always
 RestartSec=5
 StandardOutput=journal
 StandardError=journal
 Environment=DISPLAY=:0
-Environment=XAUTHORITY=/home/pi/.Xauthority
+Environment=XAUTHORITY=/home/frioaj1/.Xauthority
 
 [Install]
 WantedBy=multi-user.target
