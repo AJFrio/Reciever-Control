@@ -12,19 +12,19 @@ This application detects a raised, open hand with MediaPipe and drives an L9110S
 
 ## Hardware Wiring
 
-- `MOTOR_FORWARD_PIN` (`GPIO17` by default) → L9110S `IA1`
-- `MOTOR_BACKWARD_PIN` (`GPIO18` by default) → L9110S `IB2`
-- Raspberry Pi `5 V` (or external motor supply within 2.5–12 V) → L9110S `VCC`
-- Raspberry Pi `GND` → L9110S `GND`
-- Motor leads connect to `OA1`/`OB1` (or `OA2`/`OB2`)
+- `MOTOR_FORWARD_PIN` (`GPIO17` by default) → Driver board `a-1a`
+- `MOTOR_BACKWARD_PIN` (`GPIO18` by default) → Driver board `a-1b`
+- Raspberry Pi `5 V` (or external motor supply within 2.5–12 V) → Driver board `VCC`
+- Raspberry Pi `GND` → Driver board `GND`
+- Motor leads connect to motor output pins (typically `OA1`/`OA2` for motor A channel)
 
 > **Tip:** Use an external supply for motors that draw more than the Pi’s 5 V rail can safely provide. Always share ground between the Pi and the driver supply.
 
 ```
-Raspberry Pi (BCM)             L9110S Driver                DC Motor
+Raspberry Pi (BCM)          Driver Board              DC Motor
 ┌────────────────────┐         ┌────────────────────┐       ┌──────────┐
-│ GPIO17 ────────────┼────────▶│ IA1                │──────▶│ Motor +  │
-│ GPIO18 ────────────┼────────▶│ IB2                │──────▶│ Motor -  │
+│ GPIO17 ────────────┼────────▶│ a-1a               │──────▶│ Motor +  │
+│ GPIO18 ────────────┼────────▶│ a-1b               │──────▶│ Motor -  │
 │ GND   ─────────────┼────────▶│ GND                │       └──────────┘
 │ 5V*  ──────────────┼────────▶│ VCC (2.5–12 V)     │
 └────────────────────┘         └────────────────────┘
@@ -41,7 +41,7 @@ Raspberry Pi (BCM)             L9110S Driver                DC Motor
 
 Open `main.py` and adjust the constants near the top as needed:
 
-- `MOTOR_FORWARD_PIN` / `MOTOR_BACKWARD_PIN`: change to the BCM pins you wired
+- `MOTOR_FORWARD_PIN` / `MOTOR_BACKWARD_PIN`: change to the BCM pins you wired to `a-1a` and `a-1b`
 - `LEFT_DIRECTION_IS_FORWARD`: set `False` if you wire the driver differently or prefer the right tilt to be forward
 - `MOTOR_NEUTRAL_ANGLE`: widen or narrow the neutral zone that keeps the motor stopped
 

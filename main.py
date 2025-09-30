@@ -11,7 +11,8 @@ except (ImportError, RuntimeError):
 
 # === Motor configuration ===================================================
 # Update these BCM pin numbers to match the Raspberry Pi pins wired to
-# IA1 (forward) and IB2 (reverse) on the L9110S driver.
+# a-1a (forward) and a-1b (reverse) on the driver board.
+# For motor A channel: a-1a controls forward, a-1b controls reverse
 MOTOR_FORWARD_PIN = 17
 MOTOR_BACKWARD_PIN = 18
 
