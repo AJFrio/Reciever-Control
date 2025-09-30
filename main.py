@@ -28,12 +28,15 @@ MOTOR_SPEED = 0.2
 
 
 # === Video / processing configuration =====================================
-TARGET_FRAME_WIDTH = 640
-TARGET_FRAME_HEIGHT = 480
-TARGET_FPS = 30
+# Optimized for Raspberry Pi performance (reduced resolution and processing)
+TARGET_FRAME_WIDTH = 320  # Reduced from 640 for 4x less processing
+TARGET_FRAME_HEIGHT = 240  # Reduced from 480 for 4x less processing
+TARGET_FPS = 15  # Reduced from 30, but still smooth enough
 
 # Run the face mesh every N frames to lighten CPU load. Set to 1 for every frame.
-FACE_MESH_UPDATE_INTERVAL = 2
+# Increased from 2 to 5 for better performance (face mesh is expensive)
+# Set to 0 to completely disable face mesh for maximum performance
+FACE_MESH_UPDATE_INTERVAL = 5
 
 # Toggle visualization (window + overlays). Set to False for headless/low-power runs.
 VISUALIZE = True
@@ -308,13 +311,14 @@ def run_hand_joint_overlay(camera_index: int = 0, draw_labels: bool = False) -> 
 
     with hands_solution.Hands(
         static_image_mode=False,
-        model_complexity=1,
+        model_complexity=0,  # Reduced from 1 to 0 (lightest model) for better performance
         max_num_hands=2,
         min_detection_confidence=0.5,
         min_tracking_confidence=0.5,
     ) as hands, face_mesh_solution.FaceMesh(
         static_image_mode=False, max_num_faces=1, min_detection_confidence=0.5
     ) as face_mesh:
+        # Note: Face mesh is optional for performance. Set FACE_MESH_UPDATE_INTERVAL to 0 to disable
         try:
             frame_counter = 0
             while True:

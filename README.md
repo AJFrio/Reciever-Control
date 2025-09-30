@@ -47,6 +47,17 @@ Open `main.py` and adjust the constants near the top as needed:
 - `MOTOR_NEUTRAL_ANGLE`: widen or narrow the neutral zone that keeps the motor stopped
 - Motor speed is controlled via PWM and set to 20% by default (80% reduction from full speed)
 
+### Performance Optimizations
+
+For better performance on Raspberry Pi (currently optimized for ~15-20 FPS):
+
+- **Frame Resolution**: Reduced to 320×240 (from 640×480) - 4× less processing
+- **Hand Model**: Set to `model_complexity=0` (lightest) for faster processing
+- **Face Mesh**: Runs every 5th frame (set `FACE_MESH_UPDATE_INTERVAL=0` to disable entirely)
+- **Target FPS**: Set to 15 FPS for smoother performance
+
+For maximum speed, you can disable face mesh entirely by setting `FACE_MESH_UPDATE_INTERVAL = 0`.
+
 You can also modify the speed by changing the `speed` parameter when creating the `MotorController` instance:
 
 ```python
