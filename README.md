@@ -1,9 +1,9 @@
 ## Receiver Control
 
-This application detects a raised, open hand with MediaPipe and drives an L9110S H-bridge from a Raspberry Pi to spin a single DC motor. The motor direction follows the detected hand tilt:
+This application detects a raised, open hand with MediaPipe and drives an L9110S H-bridge from a Raspberry Pi to control a stepper motor. The motor direction follows the detected hand tilt:
 
-- Left tilt → forward (by default)
-- Right tilt → reverse
+- Left tilt → clockwise rotation (by default)
+- Right tilt → counterclockwise rotation
 - Vertical (within `45°`) → motor stops
 - **Face or hand not detected** → motor stops immediately
 
@@ -13,19 +13,28 @@ This application detects a raised, open hand with MediaPipe and drives an L9110S
 
 ## Hardware Wiring
 
-- `MOTOR_FORWARD_PIN` (`GPIO17` by default) → Driver board `a-1a`
-- `MOTOR_BACKWARD_PIN` (`GPIO18` by default) → Driver board `a-1b`
+### Stepper Motor Connection
+
+The L9110S driver board uses two H-bridges to control a bipolar stepper motor:
+
+- `STEPPER_COIL_A_PIN1` (`GPIO17` by default) → Driver board `a-1a` (Coil A control 1)
+- `STEPPER_COIL_A_PIN2` (`GPIO18` by default) → Driver board `a-1b` (Coil A control 2)
+- `STEPPER_COIL_B_PIN1` (`GPIO22` by default) → Driver board `b-1a` (Coil B control 1)
+- `STEPPER_COIL_B_PIN2` (`GPIO23` by default) → Driver board `b-2a` (Coil B control 2)
 - Raspberry Pi `5 V` (or external motor supply within 2.5–12 V) → Driver board `VCC`
 - Raspberry Pi `GND` → Driver board `GND`
-- Motor leads connect to motor output pins (typically `OA1`/`OA2` for motor A channel)
 
-> **Tip:** Use an external supply for motors that draw more than the Pi’s 5 V rail can safely provide. Always share ground between the Pi and the driver supply.
+### Stepper Motor Wiring
+
+Connect your bipolar stepper motor coils to the driver board motor outputs:
 
 ```
-Raspberry Pi (BCM)          Driver Board              DC Motor
+Raspberry Pi (BCM)          Driver Board              Stepper Motor
 ┌────────────────────┐         ┌────────────────────┐       ┌──────────┐
-│ GPIO17 ────────────┼────────▶│ a-1a               │──────▶│ Motor +  │
-│ GPIO18 ────────────┼────────▶│ a-1b               │──────▶│ Motor -  │
+│ GPIO17 ────────────┼────────▶│ a-1a               │       │ Coil A   │
+│ GPIO18 ────────────┼────────▶│ a-1b               │──────▶│          │
+│ GPIO22 ────────────┼────────▶│ b-1a               │       │ Coil B   │
+│ GPIO23 ────────────┼────────▶│ b-2a               │──────▶│          │
 │ GND   ─────────────┼────────▶│ GND                │       └──────────┘
 │ 5V*  ──────────────┼────────▶│ VCC (2.5–12 V)     │
 └────────────────────┘         └────────────────────┘
@@ -33,19 +42,30 @@ Raspberry Pi (BCM)          Driver Board              DC Motor
             │                             │
             └─────────────── Shared Ground ────────────────┘
 
-*Use an external supply within the driver’s range when your motor needs more
- current than the Pi’s 5 V pin can deliver. Connect its positive lead to `VCC`
+*Use an external supply within the driver's range when your motor needs more
+ current than the Pi's 5 V pin can deliver. Connect its positive lead to VCC
  and its ground to the common ground line.
 ```
+
+### Motor Output Connections
+
+The driver board's motor output terminals (typically labeled OA1/OA2 for channel A and OB1/OB2 for channel B) should be connected to your stepper motor coils:
+
+- **Coil A**: Connect to OA1 and OA2 terminals
+- **Coil B**: Connect to OB1 and OB2 terminals
+
+> **Important:** Make sure to identify which wires of your stepper motor correspond to which coil. You may need to experiment or consult your motor's datasheet to determine the correct coil pairing.
 
 ## Configuration
 
 Open `main.py` and adjust the constants near the top as needed:
 
-- `MOTOR_FORWARD_PIN` / `MOTOR_BACKWARD_PIN`: change to the BCM pins you wired to `a-1a` and `a-1b`
-- `LEFT_DIRECTION_IS_FORWARD`: set `False` if you wire the driver differently or prefer the right tilt to be forward
+- `STEPPER_COIL_A_PIN1` / `STEPPER_COIL_A_PIN2`: BCM pins wired to `a-1a` and `a-1b` (controls coil A)
+- `STEPPER_COIL_B_PIN1` / `STEPPER_COIL_B_PIN2`: BCM pins wired to `b-1a` and `b-2a` (controls coil B)
+- `LEFT_DIRECTION_IS_FORWARD`: set `False` if you prefer right tilt to trigger clockwise rotation
 - `MOTOR_NEUTRAL_ANGLE`: widen or narrow the neutral zone that keeps the motor stopped
-- Motor speed is controlled via PWM and set to 20% by default (80% reduction from full speed)
+- `STEPPER_SPEED`: motor speed in steps per second (1.0 to 200.0, default: 100.0)
+- `STEPPER_MODE`: "full" for full-step mode, "half" for half-step mode (smoother but slower)
 
 ### Performance Optimizations
 
@@ -78,7 +98,7 @@ To automatically start the Receiver Control system when your Raspberry Pi boots:
 
 2. **Make the startup script executable:**
    ```bash
-   chmod +x start_receiver_control.sh
+   chmod +x /home/frioaj1/Downloads/Reciever-Control-main/start_receiver_control.sh
    ```
 
 3. **Copy the service file to systemd:**
@@ -123,17 +143,22 @@ To automatically start the Receiver Control system when your Raspberry Pi boots:
 - The service includes display environment variables for GUI applications
 - If you modify the script, restart the service: `sudo systemctl restart receiver-control.service`
 - **Note:** The `frioaj1` user needs sudo privileges to manage (start/stop/enable) the service
+- **UV Requirement:** Make sure UV is installed and available in the frioaj1 user's PATH. Install with: `curl -LsSf https://astral.sh/uv/install.sh | sh`
 
 ### Runtime Speed Control:
 
 ```python
-motor_controller = MotorController(MOTOR_FORWARD_PIN, MOTOR_BACKWARD_PIN, speed=0.5)  # 50% speed
+motor_controller = StepperMotorController(
+    STEPPER_COIL_A_PIN1, STEPPER_COIL_A_PIN2,
+    STEPPER_COIL_B_PIN1, STEPPER_COIL_B_PIN2,
+    speed=150.0  # 150 steps per second
+)
 ```
 
 Or use the `set_speed()` method at runtime:
 
 ```python
-motor_controller.set_speed(0.3)  # 30% speed
+motor_controller.set_speed(75.0)  # 75 steps per second
 ```
 
 ## Running
@@ -148,6 +173,7 @@ On non-Raspberry Pi systems the motor calls fall back to console logging so you 
 
 The system includes automatic motor shutdown for safety:
 - **Face or Hand Detection Loss**: If either the face or hand disappears from view, or if the hand doesn't meet the detection criteria (open hand at head height), the motor immediately stops
-- **PWM Speed Control**: Motor runs at reduced speed (20% by default) to prevent excessive current draw
+- **Speed Control**: Motor speed is controlled via step rate (default: 100 steps/second) to prevent excessive current draw
 - **GPIO Error Handling**: Graceful fallback to simulation mode if GPIO hardware is unavailable
+- **Coil De-energizing**: When stopped, all motor coils are de-energized to prevent overheating
 

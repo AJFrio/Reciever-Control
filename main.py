@@ -9,22 +9,28 @@ except (ImportError, RuntimeError):
     GPIO = None
 
 
-# === Motor configuration ===================================================
-# Update these BCM pin numbers to match the Raspberry Pi pins wired to
-# a-1a (forward) and a-1b (reverse) on the driver board.
-# For motor A channel: a-1a controls forward, a-1b controls reverse
-MOTOR_FORWARD_PIN = 17
-MOTOR_BACKWARD_PIN = 18
+# === Stepper Motor configuration =========================================
+# Update these BCM pin numbers to match the Raspberry Pi pins wired to the L9110S driver board.
+# For stepper motor control:
+# - Coil A (first coil): controlled by a-1a and a-1b pins
+# - Coil B (second coil): controlled by b-1a and b-2a pins
+STEPPER_COIL_A_PIN1 = 17  # a-1a - Controls one direction of coil A
+STEPPER_COIL_A_PIN2 = 18  # a-1b - Controls opposite direction of coil A
+STEPPER_COIL_B_PIN1 = 22  # b-1a - Controls one direction of coil B
+STEPPER_COIL_B_PIN2 = 23  # b-2a - Controls opposite direction of coil B
 
-# When True, pointing LEFT triggers MOTOR_FORWARD_PIN; when False, pointing RIGHT does.
+# When True, pointing LEFT triggers forward/clockwise rotation; when False, pointing RIGHT does.
 LEFT_DIRECTION_IS_FORWARD = True
 
 # Angle in degrees that counts as "neutral" (motor stops) around vertical.
 MOTOR_NEUTRAL_ANGLE = 45.0
 
-# Motor speed as a percentage (0.0 to 1.0) - 0.2 = 20% speed (80% reduction)
-# This uses PWM to control motor speed rather than just on/off control
-MOTOR_SPEED = 0.2
+# Stepper motor speed as steps per second (1.0 to 200.0)
+# This controls how fast the stepper motor rotates
+STEPPER_SPEED = 4.0
+
+# Stepper motor stepping mode: "full" for full steps, "half" for half steps
+STEPPER_MODE = "full"
 
 
 # === Video / processing configuration =====================================
@@ -65,25 +71,62 @@ MIDDLE_FINGER_LANDMARKS = (
 )
 
 
-class MotorController:
-    """Controls a single DC motor through an L9110S driver with PWM speed control."""
+class StepperMotorController:
+    """Controls a stepper motor through an L9110S driver with proper sequencing."""
 
-    def __init__(self, forward_pin: int, backward_pin: int, *, gpio_mode: str = "BCM", speed: float = 0.2) -> None:
-        self.forward_pin = forward_pin
-        self.backward_pin = backward_pin
+    # Step sequences for different stepping modes
+    FULL_STEP_SEQUENCE = [
+        # Coil A: PIN1, PIN2 | Coil B: PIN1, PIN2
+        [1, 0, 0, 0],  # Step 1: Coil A forward only
+        [1, 0, 1, 0],  # Step 2: Coil A forward, Coil B forward
+        [0, 0, 1, 0],  # Step 3: Coil B forward only
+        [0, 1, 1, 0],  # Step 4: Coil A reverse, Coil B forward
+        [0, 1, 0, 0],  # Step 5: Coil A reverse only
+        [0, 1, 0, 1],  # Step 6: Coil A reverse, Coil B reverse
+        [0, 0, 0, 1],  # Step 7: Coil B reverse only
+        [1, 0, 0, 1],  # Step 8: Coil A forward, Coil B reverse
+    ]
+
+    HALF_STEP_SEQUENCE = [
+        [1, 0, 0, 0],  # Step 1: Coil A forward only
+        [1, 0, 1, 0],  # Step 2: Coil A forward, Coil B forward
+        [0, 0, 1, 0],  # Step 3: Coil B forward only
+        [0, 1, 1, 0],  # Step 4: Coil A reverse, Coil B forward
+        [0, 1, 0, 0],  # Step 5: Coil A reverse only
+        [0, 1, 0, 1],  # Step 6: Coil A reverse, Coil B reverse
+        [0, 0, 0, 1],  # Step 7: Coil B reverse only
+        [1, 0, 0, 1],  # Step 8: Coil A forward, Coil B reverse
+        # Half steps repeat the sequence for smoother motion
+        [1, 0, 0, 0], [1, 0, 1, 0], [0, 0, 1, 0], [0, 1, 1, 0],
+        [0, 1, 0, 0], [0, 1, 0, 1], [0, 0, 0, 1], [1, 0, 0, 1],
+    ]
+
+    def __init__(self, coil_a_pin1: int, coil_a_pin2: int, coil_b_pin1: int, coil_b_pin2: int,
+                 *, gpio_mode: str = "BCM", speed: float = 100.0, mode: str = "full") -> None:
+        self.coil_a_pin1 = coil_a_pin1
+        self.coil_a_pin2 = coil_a_pin2
+        self.coil_b_pin1 = coil_b_pin1
+        self.coil_b_pin2 = coil_b_pin2
+
+        self.pins = [coil_a_pin1, coil_a_pin2, coil_b_pin1, coil_b_pin2]
+
         self.current_state = "stopped"
         self.gpio_mode = gpio_mode
-        self.speed = max(0.0, min(1.0, speed))  # Clamp speed between 0 and 1
+        self.speed = max(1.0, min(200.0, speed))  # Clamp speed between 1 and 200 steps/sec
+        self.mode = mode.lower()
         self.available = GPIO is not None
         self._gpio_initialized = False
-        self._forward_pwm = None
-        self._backward_pwm = None
+
+        # Stepper motor state
+        self.current_step = 0
+        self.direction = 1  # 1 for forward/clockwise, -1 for reverse/counterclockwise
+        self.is_running = False
 
         if self.available:
             self._initialize_gpio()
         else:
             print(
-                "Warning: RPi.GPIO is not available. Motor control is disabled; "
+                "Warning: RPi.GPIO is not available. Stepper motor control is disabled; "
                 "update dependencies or run on a Raspberry Pi."
             )
 
@@ -97,66 +140,91 @@ class MotorController:
         else:
             raise ValueError(f"Unsupported GPIO mode '{self.gpio_mode}'. Use 'BCM' or 'BOARD'.")
 
-        # Set up PWM for speed control (1000 Hz frequency)
-        GPIO.setup(self.forward_pin, GPIO.OUT)
-        GPIO.setup(self.backward_pin, GPIO.OUT)
-
-        self._forward_pwm = GPIO.PWM(self.forward_pin, 1000)
-        self._backward_pwm = GPIO.PWM(self.backward_pin, 1000)
-
-        self._forward_pwm.start(0)  # Start with 0% duty cycle (stopped)
-        self._backward_pwm.start(0)  # Start with 0% duty cycle (stopped)
+        # Set up all pins as outputs
+        for pin in self.pins:
+            GPIO.setup(pin, GPIO.OUT)
 
         self._gpio_initialized = True
 
+    def _set_coil_states(self, coil_a1: bool, coil_a2: bool, coil_b1: bool, coil_b2: bool) -> None:
+        """Set the state of all four coil control pins."""
+        GPIO.output(self.coil_a_pin1, GPIO.HIGH if coil_a1 else GPIO.LOW)
+        GPIO.output(self.coil_a_pin2, GPIO.HIGH if coil_a2 else GPIO.LOW)
+        GPIO.output(self.coil_b_pin1, GPIO.HIGH if coil_b1 else GPIO.LOW)
+        GPIO.output(self.coil_b_pin2, GPIO.HIGH if coil_b2 else GPIO.LOW)
+
+    def _get_step_sequence(self):
+        """Get the appropriate step sequence based on the configured mode."""
+        if self.mode == "half":
+            return self.HALF_STEP_SEQUENCE
+        else:  # Default to full step
+            return self.FULL_STEP_SEQUENCE
+
+    def _step_motor(self) -> None:
+        """Execute one step of the stepper motor."""
+        if not self.available or not self.is_running:
+            return
+
+        sequence = self._get_step_sequence()
+        step_pattern = sequence[self.current_step % len(sequence)]
+
+        # Apply the step pattern: [coil_a1, coil_a2, coil_b1, coil_b2]
+        self._set_coil_states(*step_pattern)
+
+        # Move to next step
+        self.current_step += self.direction
+
     def forward(self) -> None:
-        self._set_state("forward")
+        """Start rotating forward (clockwise)."""
+        self.direction = 1
+        if not self.is_running:
+            self.is_running = True
+            self.current_state = "forward"
 
     def reverse(self) -> None:
-        self._set_state("reverse")
+        """Start rotating in reverse (counterclockwise)."""
+        self.direction = -1
+        if not self.is_running:
+            self.is_running = True
+            self.current_state = "reverse"
 
     def stop(self) -> None:
-        self._set_state("stopped")
-
-    def _set_state(self, target_state: str) -> None:
-        if target_state == self.current_state:
-            return
-
-        if not self.available:
-            print(f"Motor state -> {target_state} at {self.speed*100}% speed (simulated)")
-            self.current_state = target_state
-            return
-
-        if target_state == "forward":
-            self._forward_pwm.ChangeDutyCycle(self.speed * 100)  # Convert 0-1 to 0-100%
-            self._backward_pwm.ChangeDutyCycle(0)
-        elif target_state == "reverse":
-            self._forward_pwm.ChangeDutyCycle(0)
-            self._backward_pwm.ChangeDutyCycle(self.speed * 100)  # Convert 0-1 to 0-100%
-        elif target_state == "stopped":
-            self._forward_pwm.ChangeDutyCycle(0)
-            self._backward_pwm.ChangeDutyCycle(0)
-        else:
-            raise ValueError(f"Unknown motor state '{target_state}'.")
-
-        self.current_state = target_state
+        """Stop the stepper motor."""
+        self.is_running = False
+        self.current_state = "stopped"
+        if self.available:
+            # Turn off all coils when stopped
+            self._set_coil_states(0, 0, 0, 0)
 
     def set_speed(self, speed: float) -> None:
-        """Set motor speed as a percentage (0.0 to 1.0)."""
-        self.speed = max(0.0, min(1.0, speed))  # Clamp speed between 0 and 1
-        # Update current state with new speed
-        if self.current_state != "stopped":
-            self._set_state(self.current_state)
+        """Set stepper motor speed in steps per second (1.0 to 200.0)."""
+        self.speed = max(1.0, min(200.0, speed))
+
+    def run_stepper_loop(self) -> None:
+        """Main loop to run the stepper motor at the specified speed."""
+        import threading
+        import time
+
+        def stepper_thread():
+            step_delay = 1.0 / self.speed
+
+            while self.is_running:
+                self._step_motor()
+                time.sleep(step_delay)
+
+            # Ensure motor stops when thread ends
+            if self.available:
+                self._set_coil_states(0, 0, 0, 0)
+
+        if self.is_running:
+            thread = threading.Thread(target=stepper_thread, daemon=True)
+            thread.start()
 
     def cleanup(self) -> None:
+        """Cleanup GPIO resources."""
+        self.stop()
         if self.available and self._gpio_initialized:
-            # Stop PWM before cleanup
-            if self._forward_pwm:
-                self._forward_pwm.stop()
-            if self._backward_pwm:
-                self._backward_pwm.stop()
             GPIO.cleanup()
-        self.current_state = "stopped"
 
 
 def is_hand_open(hand_landmarks, handedness) -> bool:
@@ -307,7 +375,11 @@ def run_hand_joint_overlay(camera_index: int = 0, draw_labels: bool = False) -> 
 
     hands_solution = mp.solutions.hands
     face_mesh_solution = mp.solutions.face_mesh
-    motor_controller = MotorController(MOTOR_FORWARD_PIN, MOTOR_BACKWARD_PIN, speed=MOTOR_SPEED)
+    motor_controller = StepperMotorController(
+        STEPPER_COIL_A_PIN1, STEPPER_COIL_A_PIN2,
+        STEPPER_COIL_B_PIN1, STEPPER_COIL_B_PIN2,
+        speed=STEPPER_SPEED, mode=STEPPER_MODE
+    )
 
     with hands_solution.Hands(
         static_image_mode=False,
@@ -417,13 +489,18 @@ def run_hand_joint_overlay(camera_index: int = 0, draw_labels: bool = False) -> 
                         current_drive_state = "stopped"
                     else:
                         if signed_angle_deg < 0:
-                            current_drive_state = "forward" if LEFT_DIRECTION_IS_FORWARD else "reverse"
+                            target_state = "forward" if LEFT_DIRECTION_IS_FORWARD else "reverse"
                         else:
-                            current_drive_state = "reverse" if LEFT_DIRECTION_IS_FORWARD else "forward"
-                        if current_drive_state == "forward":
-                            motor_controller.forward()
-                        else:
-                            motor_controller.reverse()
+                            target_state = "reverse" if LEFT_DIRECTION_IS_FORWARD else "forward"
+
+                        if target_state != current_drive_state:
+                            current_drive_state = target_state
+                            if current_drive_state == "forward":
+                                motor_controller.forward()
+                                motor_controller.run_stepper_loop()
+                            elif current_drive_state == "reverse":
+                                motor_controller.reverse()
+                                motor_controller.run_stepper_loop()
 
                     if VISUALIZE:
                         if signed_angle_deg >= MOTOR_NEUTRAL_ANGLE:

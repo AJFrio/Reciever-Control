@@ -14,6 +14,8 @@ StandardOutput=journal
 StandardError=journal
 Environment=DISPLAY=:0
 Environment=XAUTHORITY=/home/frioaj1/.Xauthority
+Environment=PATH=/home/frioaj1/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=HOME=/home/frioaj1
 
 [Install]
 WantedBy=multi-user.target
