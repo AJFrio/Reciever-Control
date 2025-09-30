@@ -5,6 +5,7 @@ This application detects a raised, open hand with MediaPipe and drives an L9110S
 - Left tilt → forward (by default)
 - Right tilt → reverse
 - Vertical (within `45°`) → motor stops
+- **Hand not detected** → motor stops immediately
 
 ## Housing CAD
 
@@ -65,4 +66,11 @@ python main.py
 ```
 
 On non-Raspberry Pi systems the motor calls fall back to console logging so you can test the hand-tracking logic without GPIO access.
+
+## Safety Features
+
+The system includes automatic motor shutdown for safety:
+- **Hand Detection Loss**: If the hand disappears from view or doesn't meet the detection criteria (open hand at head height), the motor immediately stops
+- **PWM Speed Control**: Motor runs at reduced speed (20% by default) to prevent excessive current draw
+- **GPIO Error Handling**: Graceful fallback to simulation mode if GPIO hardware is unavailable
 

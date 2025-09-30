@@ -353,10 +353,10 @@ def run_hand_joint_overlay(camera_index: int = 0, draw_labels: bool = False) -> 
                 ) = find_best_hand_for_person(hand_results, face_landmarks)
 
                 if best_hand and best_handedness and best_is_open and best_is_at_head:
-                    
+
                     hand_landmarks = best_hand
                     handedness = best_handedness
-                    
+
                     if VISUALIZE:
                         # Draw only middle finger joints (landmarks 9-12)
                         for idx in MIDDLE_FINGER_LANDMARKS:
@@ -467,6 +467,10 @@ def run_hand_joint_overlay(camera_index: int = 0, draw_labels: bool = False) -> 
                             2,
                             cv2.LINE_AA,
                         )
+
+                else:
+                    # No suitable hand detected - stop the motor
+                    motor_controller.stop()
 
                 if VISUALIZE:
                     cv2.imshow("Hand joints - press 'q' to quit", frame_bgr)
