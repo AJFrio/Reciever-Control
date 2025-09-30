@@ -44,6 +44,19 @@ Open `main.py` and adjust the constants near the top as needed:
 - `MOTOR_FORWARD_PIN` / `MOTOR_BACKWARD_PIN`: change to the BCM pins you wired to `a-1a` and `a-1b`
 - `LEFT_DIRECTION_IS_FORWARD`: set `False` if you wire the driver differently or prefer the right tilt to be forward
 - `MOTOR_NEUTRAL_ANGLE`: widen or narrow the neutral zone that keeps the motor stopped
+- Motor speed is controlled via PWM and set to 20% by default (80% reduction from full speed)
+
+You can also modify the speed by changing the `speed` parameter when creating the `MotorController` instance:
+
+```python
+motor_controller = MotorController(MOTOR_FORWARD_PIN, MOTOR_BACKWARD_PIN, speed=0.5)  # 50% speed
+```
+
+Or use the `set_speed()` method at runtime:
+
+```python
+motor_controller.set_speed(0.3)  # 30% speed
+```
 
 ## Running
 

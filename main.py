@@ -22,6 +22,10 @@ LEFT_DIRECTION_IS_FORWARD = True
 # Angle in degrees that counts as "neutral" (motor stops) around vertical.
 MOTOR_NEUTRAL_ANGLE = 45.0
 
+# Motor speed as a percentage (0.0 to 1.0) - 0.2 = 20% speed (80% reduction)
+# This uses PWM to control motor speed rather than just on/off control
+MOTOR_SPEED = 0.2
+
 
 # === Video / processing configuration =====================================
 TARGET_FRAME_WIDTH = 640
@@ -59,15 +63,18 @@ MIDDLE_FINGER_LANDMARKS = (
 
 
 class MotorController:
-    """Controls a single DC motor through an L9110S driver."""
+    """Controls a single DC motor through an L9110S driver with PWM speed control."""
 
-    def __init__(self, forward_pin: int, backward_pin: int, *, gpio_mode: str = "BCM") -> None:
+    def __init__(self, forward_pin: int, backward_pin: int, *, gpio_mode: str = "BCM", speed: float = 0.2) -> None:
         self.forward_pin = forward_pin
         self.backward_pin = backward_pin
         self.current_state = "stopped"
         self.gpio_mode = gpio_mode
+        self.speed = max(0.0, min(1.0, speed))  # Clamp speed between 0 and 1
         self.available = GPIO is not None
         self._gpio_initialized = False
+        self._forward_pwm = None
+        self._backward_pwm = None
 
         if self.available:
             self._initialize_gpio()
@@ -87,8 +94,16 @@ class MotorController:
         else:
             raise ValueError(f"Unsupported GPIO mode '{self.gpio_mode}'. Use 'BCM' or 'BOARD'.")
 
-        GPIO.setup(self.forward_pin, GPIO.OUT, initial=GPIO.LOW)
-        GPIO.setup(self.backward_pin, GPIO.OUT, initial=GPIO.LOW)
+        # Set up PWM for speed control (1000 Hz frequency)
+        GPIO.setup(self.forward_pin, GPIO.OUT)
+        GPIO.setup(self.backward_pin, GPIO.OUT)
+
+        self._forward_pwm = GPIO.PWM(self.forward_pin, 1000)
+        self._backward_pwm = GPIO.PWM(self.backward_pin, 1000)
+
+        self._forward_pwm.start(0)  # Start with 0% duty cycle (stopped)
+        self._backward_pwm.start(0)  # Start with 0% duty cycle (stopped)
+
         self._gpio_initialized = True
 
     def forward(self) -> None:
@@ -105,26 +120,38 @@ class MotorController:
             return
 
         if not self.available:
-            print(f"Motor state -> {target_state} (simulated)")
+            print(f"Motor state -> {target_state} at {self.speed*100}% speed (simulated)")
             self.current_state = target_state
             return
 
         if target_state == "forward":
-            GPIO.output(self.forward_pin, GPIO.HIGH)
-            GPIO.output(self.backward_pin, GPIO.LOW)
+            self._forward_pwm.ChangeDutyCycle(self.speed * 100)  # Convert 0-1 to 0-100%
+            self._backward_pwm.ChangeDutyCycle(0)
         elif target_state == "reverse":
-            GPIO.output(self.forward_pin, GPIO.LOW)
-            GPIO.output(self.backward_pin, GPIO.HIGH)
+            self._forward_pwm.ChangeDutyCycle(0)
+            self._backward_pwm.ChangeDutyCycle(self.speed * 100)  # Convert 0-1 to 0-100%
         elif target_state == "stopped":
-            GPIO.output(self.forward_pin, GPIO.LOW)
-            GPIO.output(self.backward_pin, GPIO.LOW)
+            self._forward_pwm.ChangeDutyCycle(0)
+            self._backward_pwm.ChangeDutyCycle(0)
         else:
             raise ValueError(f"Unknown motor state '{target_state}'.")
 
         self.current_state = target_state
 
+    def set_speed(self, speed: float) -> None:
+        """Set motor speed as a percentage (0.0 to 1.0)."""
+        self.speed = max(0.0, min(1.0, speed))  # Clamp speed between 0 and 1
+        # Update current state with new speed
+        if self.current_state != "stopped":
+            self._set_state(self.current_state)
+
     def cleanup(self) -> None:
         if self.available and self._gpio_initialized:
+            # Stop PWM before cleanup
+            if self._forward_pwm:
+                self._forward_pwm.stop()
+            if self._backward_pwm:
+                self._backward_pwm.stop()
             GPIO.cleanup()
         self.current_state = "stopped"
 
@@ -277,7 +304,7 @@ def run_hand_joint_overlay(camera_index: int = 0, draw_labels: bool = False) -> 
 
     hands_solution = mp.solutions.hands
     face_mesh_solution = mp.solutions.face_mesh
-    motor_controller = MotorController(MOTOR_FORWARD_PIN, MOTOR_BACKWARD_PIN)
+    motor_controller = MotorController(MOTOR_FORWARD_PIN, MOTOR_BACKWARD_PIN, speed=MOTOR_SPEED)
 
     with hands_solution.Hands(
         static_image_mode=False,
@@ -331,9 +358,9 @@ def run_hand_joint_overlay(camera_index: int = 0, draw_labels: bool = False) -> 
                     handedness = best_handedness
                     
                     if VISUALIZE:
-                        for landmark_index, landmark in enumerate(
-                            hand_landmarks.landmark
-                        ):
+                        # Draw only middle finger joints (landmarks 9-12)
+                        for idx in MIDDLE_FINGER_LANDMARKS:
+                            landmark = hand_landmarks.landmark[idx]
                             x_px = int(landmark.x * image_width)
                             y_px = int(landmark.y * image_height)
 
@@ -348,7 +375,7 @@ def run_hand_joint_overlay(camera_index: int = 0, draw_labels: bool = False) -> 
                             if draw_labels:
                                 cv2.putText(
                                     frame_bgr,
-                                    str(landmark_index),
+                                    str(idx),
                                     (x_px + 4, y_px - 4),
                                     cv2.FONT_HERSHEY_SIMPLEX,
                                     0.4,
