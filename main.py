@@ -352,7 +352,7 @@ def run_hand_joint_overlay(camera_index: int = 0, draw_labels: bool = False) -> 
                     best_is_at_head,
                 ) = find_best_hand_for_person(hand_results, face_landmarks)
 
-                if best_hand and best_handedness and best_is_open and best_is_at_head:
+                if face_landmarks and best_hand and best_handedness and best_is_open and best_is_at_head:
 
                     hand_landmarks = best_hand
                     handedness = best_handedness
