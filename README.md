@@ -60,6 +60,71 @@ For maximum speed, you can disable face mesh entirely by setting `FACE_MESH_UPDA
 
 You can also modify the speed by changing the `speed` parameter when creating the `MotorController` instance:
 
+## Autostart Setup (Raspberry Pi)
+
+To automatically start the Receiver Control system when your Raspberry Pi boots:
+
+### Files Created:
+- `start_receiver_control.sh` - Startup script that runs the application using UV
+- `receiver-control.service` - Systemd service file for autostart
+
+### Step-by-Step Installation:
+
+1. **Copy the startup files to your Raspberry Pi:**
+   ```bash
+   # Copy these files to your Raspberry Pi's Reciever-Control-main directory
+   # (Make sure you're in the project directory on your Pi)
+   ```
+
+2. **Make the startup script executable:**
+   ```bash
+   chmod +x start_receiver_control.sh
+   ```
+
+3. **Copy the service file to systemd:**
+   ```bash
+   sudo cp /home/frioa1/Downloads/Reciever-Control-main/receiver-control.service /etc/systemd/system/
+   ```
+
+4. **Reload systemd to recognize the new service:**
+   ```bash
+   sudo systemctl daemon-reload
+   ```
+
+5. **Enable the service to start on boot:**
+   ```bash
+   sudo systemctl enable receiver-control.service
+   ```
+
+6. **Start the service immediately (optional):**
+   ```bash
+   sudo systemctl start receiver-control.service
+   # Or start from the project directory:
+   # cd /home/frioa1/Downloads/Reciever-Control-main && ./start_receiver_control.sh
+   ```
+
+7. **Check service status:**
+   ```bash
+   sudo systemctl status receiver-control.service
+   ```
+
+### Service Management:
+
+- **Check if running:** `sudo systemctl status receiver-control.service`
+- **View logs:** `sudo journalctl -u receiver-control.service -f`
+- **Restart:** `sudo systemctl restart receiver-control.service`
+- **Stop:** `sudo systemctl stop receiver-control.service`
+- **Disable autostart:** `sudo systemctl disable receiver-control.service`
+
+### Important Notes:
+
+- The service runs as the `pi` user and assumes your project is in `/home/frioa1/Downloads/Reciever-Control-main`
+- If using a different username or path, edit the service file accordingly
+- The service includes display environment variables for GUI applications
+- If you modify the script, restart the service: `sudo systemctl restart receiver-control.service`
+
+### Runtime Speed Control:
+
 ```python
 motor_controller = MotorController(MOTOR_FORWARD_PIN, MOTOR_BACKWARD_PIN, speed=0.5)  # 50% speed
 ```
